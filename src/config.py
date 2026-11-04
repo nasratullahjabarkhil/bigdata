@@ -19,9 +19,13 @@ class Source:
     url_template: str | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
-    def resolve_url(self, iso2: str = "", iso3: str = "") -> str:
+    def resolve_url(
+        self, iso2: str = "", iso3: str = "", indicator_id: str = ""
+    ) -> str:
         if self.url_template:
-            return self.url_template.format(iso2=iso2, iso3=iso3)
+            return self.url_template.format(
+                iso2=iso2, iso3=iso3, indicator_id=indicator_id
+            )
         if self.url:
             return self.url
         raise ValueError(f"Fuente {self.id}: falta url o url_template")

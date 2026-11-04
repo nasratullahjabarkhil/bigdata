@@ -41,25 +41,33 @@ def _card_markdown(iso3: str, countries: pd.DataFrame, languages: pd.DataFrame,
         or "- (sin indicadores; posible huérfano del join)"
     )
 
-    # Comparativo simple: media regional del primer indicador disponible
+    # Comparativo: mediana regional del mismo indicador y año.
     comparative = "_Sin indicadores para comparar._"
     if not inds.empty and "region" in countries.columns:
         ind_id = inds.iloc[0]["indicator_id"]
+        year = inds.iloc[0]["year"]
         region = c["region"]
         peers = countries[countries["region"] == region]["iso3"]
         peer_vals = indicators[
             (indicators["iso3"].isin(peers))
             & (indicators["indicator_id"] == ind_id)
+            & (indicators["year"] == year)
             & indicators["value"].notna()
         ]["value"]
         if not peer_vals.empty:
-            mean_v = peer_vals.astype(float).mean()
-            own = float(inds.iloc[0]["value"])
-            comparative = (
-                f"Respecto a la media de **{region}** en `{ind_id}` "
-                f"({mean_v:,.2f}): este país está en **{own:,.2f}** "
-                f"({'por encima' if own > mean_v else 'por debajo o igual'})."
-            )
+            median_v = peer_vals.astype(float).median()
+            own_value = inds.iloc[0]["value"]
+            if pd.isna(own_value):
+                comparative = (
+                    f"No hay dato para este país en `{ind_id}` durante `{year}`."
+                )
+            else:
+                own = float(own_value)
+                comparative = (
+                    f"Respecto a la mediana de **{region}** en `{ind_id}` "
+                    f"({median_v:,.2f}): este país está en **{own:,.2f}** "
+                    f"({'por encima' if own > median_v else 'por debajo o igual'})."
+                )
 
     return f"""# Ficha país — {c['name_common']} ({iso3})
 

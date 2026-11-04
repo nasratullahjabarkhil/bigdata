@@ -1,18 +1,13 @@
-# Cinco fuentes del enunciado. Para la entrega: dejad exactamente TRES
-# activas (comentad o borrad las otras dos) y documentad la elección.
+# CAMBIO: se mantienen activas las cinco fuentes para construir el universo
+# completo de países y sus indicadores, en lugar de limitarlo a cinco países.
 #
 # url fija     → data/raw/{id}.{format}
 # url_template → data/raw/{id}_{iso2}.{format}
 #   marcadores: {iso2} {iso3}
 
-focus_countries:
-  - { iso2: ES, iso3: ESP }
-  - { iso2: FR, iso3: FRA }
-  - { iso2: DE, iso3: DEU }
-  - { iso2: IT, iso3: ITA }
-  - { iso2: PT, iso3: PRT }
 
 sources:
+  # CAMBIO: el perfil se descarga primero y sirve como catálogo ISO2/ISO3.
   - id: countries_profile
     name: mledoze/countries (perfil e idiomas)
     url: https://raw.githubusercontent.com/mledoze/countries/master/countries.json
@@ -22,31 +17,31 @@ sources:
 
   - id: worldbank_gdp
     name: World Bank — PIB per cápita (NY.GDP.PCAP.CD)
+    # CAMBIO: per_page=1000 y page=1 permiten iniciar la paginación de World Bank.
     url_template: >-
-      https://api.worldbank.org/v2/country/{iso2}/indicator/NY.GDP.PCAP.CD?format=json&mrnev=1
+      https://api.worldbank.org/v2/country/{iso2}/indicator/NY.GDP.PCAP.CD?format=json&per_page=1000&page=1
     format: json
     role: indicator
     transformer: worldbank_indicator
     meta:
       indicator_id: NY.GDP.PCAP.CD
+      aliases: [iso2, iso3]
       indicator_label: GDP per capita (current US$)
       unit: USD
 
   - id: eurostat_pop
     name: Eurostat — población (demo_pjan)
-    url_template: >-
-      https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/demo_pjan?format=JSON&lang=en&geo={iso2}&sex=T&age=TOTAL&time=2023
+    url: >-
+      https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/demo_pjan?format=JSON&lang=en
     format: json
     role: indicator
     transformer: eurostat_demo_pjan
     meta:
       indicator_id: demo_pjan
+      aliases: [iso2, iso3]
       indicator_label: Population on 1 January
       unit: persons
-      time: "2023"
 
-  # --- Fuentes 4 y 5 (descomentad una/ambas solo si sustituís a otras;
-  #     en la entrega deben quedar exactamente TRES activas) ---
   - id: owid_life_expectancy
     name: Our World in Data — life expectancy (CSV)
     url: >-
@@ -56,18 +51,24 @@ sources:
     transformer: owid_life_expectancy
     meta:
       indicator_id: life_expectancy
+      aliases: [iso2, iso3]
       indicator_label: Life expectancy
       unit: years
-      year: "2023"
-  
+
   - id: worldbank_pop
     name: World Bank — población total (SP.POP.TOTL)
     url_template: >-
-      https://api.worldbank.org/v2/country/{iso2}/indicator/SP.POP.TOTL?format=json&mrnev=1
+      https://api.worldbank.org/v2/country/{iso2}/indicator/{indicator_id}?format=json&per_page=1000&page=1
     format: json
     role: indicator
     transformer: worldbank_indicator
     meta:
       indicator_id: SP.POP.TOTL
+      indicator_ids:
+        - SP.POP.TOTL
+        - SP.DYN.LE00.IN
+        - SP.URB.TOTL.IN.ZS
+        - NY.GDP.MKTP.CD
+        - SP.POP.TOTL.FE.IN
       indicator_label: Population, total
       unit: persons

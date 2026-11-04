@@ -29,10 +29,18 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Además del SQLite, escribir Parquet en data/serving/",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Repetir descargas aunque ya existan archivos válidos",
+    )
     args = parser.parse_args(argv)
 
     if not args.skip_extract:
-        run_extract()
+        if args.force:
+            run_extract(force=True)
+        else:
+            run_extract()
     else:
         print("[pipeline] extract omitido (--skip-extract)")
 
