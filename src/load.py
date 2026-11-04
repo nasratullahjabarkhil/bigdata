@@ -29,6 +29,8 @@ def run_load(write_parquet: bool = False) -> Path:
             df.to_sql(name, conn, index=False, if_exists="replace")
             print(f"[load] {name}: {len(df)} filas → sqlite")
             if write_parquet:
+                # CAMBIO: se añade Parquet como salida para el trabajo posterior
+                # con herramientas de Big Data, manteniendo SQLite.
                 pq = SERVING / f"{name}.parquet"
                 try:
                     df.to_parquet(pq, index=False)
