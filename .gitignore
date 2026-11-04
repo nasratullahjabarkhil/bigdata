@@ -11,3 +11,9 @@ cards/*
 !cards/.gitkeep
 informe/*
 !informe/.gitkeep
+data/
+logs/
+
+# Documentación de trabajo local
+info.md
+ampliacion_todos_los_paises.md
