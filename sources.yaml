@@ -1,5 +1,8 @@
 # CAMBIO: se mantienen activas las cinco fuentes para construir el universo
 # completo de países y sus indicadores, en lugar de limitarlo a cinco países.
+# ANTES: solo 5 países fijos en focus_countries (ES, FR, DE, IT, PT).
+# AHORA: se eliminó focus_countries y se usa el perfil global (countries_profile)
+# como catálogo dinámico de ~250 países, ampliando el universo del ETL.
 #
 # url fija     → data/raw/{id}.{format}
 # url_template → data/raw/{id}_{iso2}.{format}
@@ -8,6 +11,9 @@
 
 sources:
   # CAMBIO: el perfil se descarga primero y sirve como catálogo ISO2/ISO3.
+  # ANTES: era una fuente más sin orden especial.
+  # AHORA: se procesa primero porque el resto de fuentes necesitan la lista
+  # de países (ISO2/ISO3) que se extrae de este fichero para generar sus URLs.
   - id: countries_profile
     name: mledoze/countries (perfil e idiomas)
     url: https://raw.githubusercontent.com/mledoze/countries/master/countries.json
@@ -17,7 +23,10 @@ sources:
 
   - id: worldbank_gdp
     name: World Bank — PIB per cápita (NY.GDP.PCAP.CD)
-    # CAMBIO: per_page=1000 y page=1 permiten iniciar la paginación de World Bank.
+    # CAMBIO: se añadieron per_page=1000 y page=1 a la URL.
+    # ANTES: usaba mrnev=1 (solo dato más reciente, sin paginación).
+    # AHORA: se pide hasta 1000 registros por página y se activa la paginación
+    # automática en extract.py para descargar series históricas completas.
     url_template: >-
       https://api.worldbank.org/v2/country/{iso2}/indicator/NY.GDP.PCAP.CD?format=json&per_page=1000&page=1
     format: json
@@ -25,12 +34,16 @@ sources:
     transformer: worldbank_indicator
     meta:
       indicator_id: NY.GDP.PCAP.CD
-      aliases: [iso2, iso3]
+      aliases: [iso2, iso3]  # CAMBIO: se añadieron aliases para documentar los marcadores usados en las URLs.
       indicator_label: GDP per capita (current US$)
       unit: USD
 
   - id: eurostat_pop
     name: Eurostat — población (demo_pjan)
+    # CAMBIO: se pasó de url_template (una petición por país) a url fija (una sola petición).
+    # ANTES: url_template con geo={iso2}&sex=T&age=TOTAL&time=2023 → descargaba país a país.
+    # AHORA: url fija sin filtros de país/sexo/edad/año → se descarga el dataset completo
+    # y el transformer se encarga de filtrar sex=T, age=TOTAL y extraer los datos.
     url: >-
       https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/demo_pjan?format=JSON&lang=en
     format: json
@@ -38,12 +51,18 @@ sources:
     transformer: eurostat_demo_pjan
     meta:
       indicator_id: demo_pjan
-      aliases: [iso2, iso3]
+      aliases: [iso2, iso3]  # CAMBIO: se añadieron aliases para documentar los marcadores.
       indicator_label: Population on 1 January
       unit: persons
+      # CAMBIO: se eliminó time: "2023" porque ahora el transformer parsea
+      # todas las dimensiones del JSON-stat de Eurostat (incluido "time")
+      # y extrae los años disponibles dinámicamente.
 
   - id: owid_life_expectancy
     name: Our World in Data — life expectancy (CSV)
+    # CAMBIO: se activó esta fuente (antes comentada).
+    # ANTES: solo estaban activas 3 fuentes con 5 países.
+    # AHORA: activa para aportar esperanza de vida global a nivel mundial.
     url: >-
       https://ourworldindata.org/grapher/life-expectancy.csv?v=1&csvType=full&useColumnShortNames=false
     format: csv
@@ -51,12 +70,18 @@ sources:
     transformer: owid_life_expectancy
     meta:
       indicator_id: life_expectancy
-      aliases: [iso2, iso3]
+      aliases: [iso2, iso3]  # CAMBIO: se añadieron aliases.
       indicator_label: Life expectancy
       unit: years
+      # CAMBIO: se eliminó year: "2023" para procesar todas las series anuales
+      # disponibles en lugar de un único año fijo.
 
   - id: worldbank_pop
     name: World Bank — población total (SP.POP.TOTL)
+    # CAMBIO: se activó esta fuente y se parametrizó con {indicator_id}.
+    # ANTES: descargaba únicamente SP.POP.TOTL con mrnev=1.
+    # AHORA: la URL acepta {indicator_id} dinámico y per_page=1000&page=1,
+    # permitiendo descargar múltiples indicadores de World Bank por cada país.
     url_template: >-
       https://api.worldbank.org/v2/country/{iso2}/indicator/{indicator_id}?format=json&per_page=1000&page=1
     format: json
@@ -64,6 +89,12 @@ sources:
     transformer: worldbank_indicator
     meta:
       indicator_id: SP.POP.TOTL
+      # CAMBIO: se define una lista de múltiples indicadores a descargar:
+      # - SP.POP.TOTL: Población total
+      # - SP.DYN.LE00.IN: Esperanza de vida al nacer
+      # - SP.URB.TOTL.IN.ZS: Población urbana (% del total)
+      # - NY.GDP.MKTP.CD: PIB total (USD actuales)
+      # - SP.POP.TOTL.FE.IN: Población femenina
       indicator_ids:
         - SP.POP.TOTL
         - SP.DYN.LE00.IN
