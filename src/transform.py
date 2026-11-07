@@ -25,6 +25,10 @@ from .paths import CLEAN, RAW, ensure_dirs
 Transformer = Callable[[Source, Config], dict[str, pd.DataFrame]]
 
 
+# CAMBIO: función de normalización y validación estricta de códigos ISO.
+# ANTES: se leían códigos como strings directos de diccionarios JSON (ej. item.get("cca3")).
+# AHORA: comprueba que sea un string, limpia espacios, pasa a mayúsculas y verifica
+# longitud exacta y caracteres alfabéticos, devolviendo None si es inválido.
 def _normalise_iso(value: object, length: int) -> str | None:
     if not isinstance(value, str):
         return None
@@ -37,8 +41,13 @@ def _read_json(path: Path):
         return json.load(f)
 
 
+# CAMBIO: construcción dinámica del diccionario biyectivo de mapeo ISO2 ↔ ISO3.
+# ANTES: el mapeo se construía solo a partir de los 5 países en cfg.focus_countries.
+# AHORA:
+# 1. Lee countries_profile.json para mapear todos los países del mundo (~250).
+# 2. Ignora asignaciones ambiguas o duplicadas para proteger la integridad referencial.
+# 3. Devuelve dos diccionarios: iso2_to_iso3 e iso3_to_iso2.
 def _country_maps() -> tuple[dict[str, str], dict[str, str]]:
-    # CAMBIO: el mapeo ISO2↔ISO3 se construye con todos los países del perfil.
     profile_path = RAW / "countries_profile.json"
     if not profile_path.exists():
         return {}, {}
@@ -49,7 +58,7 @@ def _country_maps() -> tuple[dict[str, str], dict[str, str]]:
         iso2 = _normalise_iso(item.get("cca2"), 2)
         iso3 = _normalise_iso(item.get("cca3"), 3)
         if iso2 and iso3:
-            # CAMBIO: se ignoran asociaciones duplicadas para proteger la clave.
+            # Se ignoran asociaciones duplicadas para proteger la clave primaria/foránea.
             if iso2 in iso2_to_iso3 or iso3 in iso3_to_iso2:
                 continue
             iso2_to_iso3[iso2] = iso3
@@ -57,8 +66,17 @@ def _country_maps() -> tuple[dict[str, str], dict[str, str]]:
     return iso2_to_iso3, iso3_to_iso2
 
 
+# CAMBIO: transformación del perfil de países para admitir el catálogo mundial,
+# tabla de entidades excluidas (auditoría) y deduplicación por ISO3.
+# ANTES:
+# - Se filtraba rígidamente con `wanted = {c.iso3 for c in cfg.focus_countries}` (solo 5 países).
+# - Se descartaban silenciosamente entidades sin códigos válidos.
+# AHORA:
+# 1. Permite procesar todos los países del perfil si no hay focus_countries restrictivo.
+# 2. Registra entidades sin ISO válido en la tabla `excluded_entities` para auditoría y trazabilidad.
+# 3. Deduplica mediante `seen_iso3` para garantizar unicidad por país en la dimensión `countries`.
+# 4. Explota idiomas en una tabla normalizada `languages` descartando registros vacíos.
 def transform_countries_profile(source: Source, cfg: Config) -> dict[str, pd.DataFrame]:
-    # CAMBIO: ya no se filtra el perfil a los cinco países originales.
     raw_path = RAW / f"{source.id}.json"
     payload = _read_json(raw_path)
 
@@ -71,6 +89,7 @@ def transform_countries_profile(source: Source, cfg: Config) -> dict[str, pd.Dat
         iso3 = _normalise_iso(item.get("cca3"), 3)
         iso2 = _normalise_iso(item.get("cca2"), 2)
         if not iso2 or not iso3:
+            # Registro en tabla de auditoría para entidades que no cumplen estándar ISO.
             excluded_rows.append(
                 {
                     "source_id": source.id,
@@ -80,9 +99,10 @@ def transform_countries_profile(source: Source, cfg: Config) -> dict[str, pd.Dat
                 }
             )
             continue
-        # CAMBIO: solo se conserva una fila por ISO3.
+        # Si se definieron focus_countries específicos en configuración, se filtran aquí.
         if accepted and iso3 not in accepted:
             continue
+        # Se garantiza clave primaria única (iso3) en countries.
         if iso3 in seen_iso3:
             continue
         seen_iso3.add(iso3)
@@ -115,8 +135,18 @@ def transform_countries_profile(source: Source, cfg: Config) -> dict[str, pd.Dat
     }
 
 
+# CAMBIO: procesamiento dinámico de archivos World Bank, resolución de indicadores y tipado numérico.
+# ANTES:
+# - Solo buscaba archivos para los 5 países en focus_countries: `RAW / f"{source.id}_{country.iso2}.json"`.
+# - No soportaba fuentes con múltiples indicadores.
+# - El campo year quedaba como string (`rec.get("date")`).
+# AHORA:
+# 1. Utiliza `RAW.glob(f"{source.id}_*.json")` para descubrir todos los archivos descargados.
+# 2. Resuelve el nombre del indicador desde el nombre del archivo (si tiene sufijo _indicator_id_iso2.json)
+#    o desde la configuración (meta["indicator_id"]), evitando mezclar indicadores.
+# 3. Omite archivos obsoletos o genéricos cuando existen archivos específicos por indicador.
+# 4. Convierte `year` a número con `pd.to_numeric(..., errors="coerce")` para análisis temporal consistente.
 def transform_worldbank_indicator(source: Source, cfg: Config) -> dict[str, pd.DataFrame]:
-    # CAMBIO: se procesan todos los JSON descargados para cada indicador.
     rows = []
     meta = source.meta or {}
     iso2_to_iso3, _ = _country_maps()
@@ -125,18 +155,47 @@ def transform_worldbank_indicator(source: Source, cfg: Config) -> dict[str, pd.D
     for path in sorted(RAW.glob(f"{source.id}_*.json")):
         parts = path.stem.split("_")
         iso2 = parts[-1]
+        filename_indicator = parts[-2] if len(parts) >= 3 else ""
+        # CAMBIO: detección de indicadores en el nombre del fichero y descarte de ficheros heredados/antiguos.
+        # QUÉ SE HACE:
+        # 1. Se extrae `filename_indicator = parts[-2]` del nombre del fichero (ej. de "worldbank_pop_SP.POP.TOTL_ES.json").
+        # 2. Si `filename_indicator` no contiene un punto '.' (es decir, no es un código oficial de indicador de World Bank),
+        #    se verifica si ya existe en disco un archivo más específico para alguno de los `indicator_ids` configurados.
+        #    De ser así, se ignora este archivo genérico antiguo mediante `continue`.
+        # POR QUÉ:
+        # Evita procesar archivos residuales o duplicar datos cuando la misma fuente se ha ejecutado
+        # primero con el esquema antiguo (sin indicador en el nombre) y luego con el esquema nuevo multi-indicador.
+        if "." not in filename_indicator:
+            configured_ids = (meta.get("indicator_ids") or [
+                meta.get("indicator_id")
+            ])
+            if any(
+                (RAW / f"{source.id}_{indicator_id}_{iso2}.json").exists()
+                for indicator_id in configured_ids
+                if indicator_id
+            ):
+                continue
         iso3 = iso2_to_iso3.get(iso2)
         if not iso3:
             continue
         payload = _read_json(path)
-        # World Bank: [meta, [records...]]
+        # World Bank devuelve estructura: [metadatos_paginacion, [lista_registros]]
         if not isinstance(payload, list) or len(payload) < 2 or not payload[1]:
             continue
         for rec in payload[1]:
             if not isinstance(rec, dict):
                 continue
+            # CAMBIO: resolución dinámica del identificador del indicador para cada fila.
+            # QUÉ SE HACE:
+            # Si el nombre del fichero incluye el indicador (contiene '.'), se usa `filename_indicator`.
+            # En caso contrario, se toma de meta.get("indicator_id") o source.id por compatibilidad hacia atrás.
+            # POR QUÉ:
+            # Permite etiquetar correctamente cada fila en la tabla `indicators` cuando una misma fuente
+            # descarga varios indicadores para el mismo país (ej. población total vs PIB vs esperanza de vida).
             indicator_id = (
-                parts[-2] if len(parts) >= 3 else meta.get("indicator_id", source.id)
+                filename_indicator
+                if "." in filename_indicator
+                else meta.get("indicator_id", source.id)
             )
             rows.append(
                 {
@@ -156,6 +215,15 @@ def transform_worldbank_indicator(source: Source, cfg: Config) -> dict[str, pd.D
     return {"indicators": pd.DataFrame(rows)}
 
 
+# CAMBIO: transformación del CSV de Our World in Data para todos los países del catálogo mundial.
+# ANTES:
+# - Solo filtraba por los 5 países originales en cfg.focus_countries.
+# - Filtraba por un año fijo configurado en meta, perdiendo la serie temporal histórica.
+# - `year` quedaba como string (`str(r[year_col])`).
+# AHORA:
+# 1. Filtra por todos los países presentes en el catálogo mundial (`wanted = set(iso3_to_iso2)`).
+# 2. Conserva la serie histórica completa si meta no especifica un año concreto.
+# 3. Convierte `year` a numérico con `pd.to_numeric(r[year_col], errors="coerce")`.
 def transform_owid_life_expectancy(source: Source, cfg: Config) -> dict[str, pd.DataFrame]:
     raw_path = RAW / f"{source.id}.csv"
     df = pd.read_csv(raw_path)
@@ -164,11 +232,10 @@ def transform_owid_life_expectancy(source: Source, cfg: Config) -> dict[str, pd.
     _, iso3_to_iso2 = _country_maps()
     if not iso3_to_iso2:
         iso3_to_iso2 = {country.iso3: country.iso2 for country in cfg.focus_countries}
-    # Columnas OWID: Entity, Code, Year, Life expectancy
+    # Columnas esperadas en OWID: Entity, Code, Year, Life expectancy
     code_col = "Code" if "Code" in df.columns else "code"
     year_col = "Year" if "Year" in df.columns else "year"
     value_col = "Life expectancy" if "Life expectancy" in df.columns else df.columns[-1]
-    # CAMBIO: se conservan todos los ISO3 presentes en el perfil global.
     wanted = set(iso3_to_iso2)
     sub = df[df[code_col].isin(wanted)].copy()
     if requested_year is not None:
@@ -191,8 +258,20 @@ def transform_owid_life_expectancy(source: Source, cfg: Config) -> dict[str, pd.
     return {"indicators": pd.DataFrame(rows)}
 
 
+# CAMBIO: decodificación del formato JSON-stat multidimensional de Eurostat y soporte para descarga global o por país.
+# ANTES:
+# - Solo leía ficheros individuales por país de los 5 países foco.
+# - Asumía un valor único con `next(iter(values.values()))`.
+# - No soportaba el fichero global descargado directamente de Eurostat.
+# AHORA:
+# 1. Soporta tanto el fichero agregado global `demo_pjan.json` como archivos individuales por país `demo_pjan_{iso2}.json`.
+# 2. Para el fichero multidimensional de Eurostat:
+#    - Descompone el índice plano de valores (`flat_index`) calculando coordenadas n-dimensionales (módulo y división entera sobre las dimensiones).
+#    - Filtra población total: sex="T" y age="TOTAL".
+#    - Extrae el año dinámicamente de la dimensión 'time'.
+# 3. Trata la ausencia de datos como ausencia real (omitir fila / null), no como cero.
+# 4. Convierte `year` a número con `pd.to_numeric(..., errors="coerce")`.
 def transform_eurostat_demo_pjan(source: Source, cfg: Config) -> dict[str, pd.DataFrame]:
-    # CAMBIO: se revisa la respuesta de Eurostat país por país.
     rows = []
     meta = source.meta or {}
     iso2_to_iso3, _ = _country_maps()
@@ -206,6 +285,7 @@ def transform_eurostat_demo_pjan(source: Source, cfg: Config) -> dict[str, pd.Da
         iso2 = path.stem.rsplit("_", 1)[-1]
         iso3 = iso2_to_iso3.get(iso2)
         payload = _read_json(path)
+        # Caso 1: Archivo consolidado Eurostat JSON-stat multidimensional
         if path == fixed_path and isinstance(payload, dict) and payload.get("id"):
             dimensions = payload["id"]
             sizes = payload.get("size", [])
@@ -220,6 +300,7 @@ def transform_eurostat_demo_pjan(source: Source, cfg: Config) -> dict[str, pd.Da
             for flat_index, value in values.items():
                 if value is None:
                     continue
+                # Conversión de índice plano a coordenadas cartesianas de la matriz multidimensional
                 remainder = int(flat_index)
                 coords = [0] * len(sizes)
                 for position in range(len(sizes) - 1, -1, -1):
@@ -234,6 +315,7 @@ def transform_eurostat_demo_pjan(source: Source, cfg: Config) -> dict[str, pd.Da
                 }
                 row_iso2 = selected.get("geo")
                 row_iso3 = iso2_to_iso3.get(row_iso2)
+                # Filtro: solo población total (ambos sexos 'T' y todas las edades 'TOTAL')
                 if not row_iso3 or selected.get("sex") not in {None, "T"}:
                     continue
                 if selected.get("age") not in {None, "TOTAL"}:
@@ -253,15 +335,14 @@ def transform_eurostat_demo_pjan(source: Source, cfg: Config) -> dict[str, pd.Da
                     }
                 )
             continue
+        # Caso 2: Respuestas individuales por país
         if not iso3:
             continue
         values = payload.get("value") or {}
         valid_values = [value for value in values.values() if value is not None]
-        # CAMBIO: la ausencia de datos se conserva como ausencia, no como cero.
+        # La ausencia de datos se conserva como ausencia, no como cero (huérfano documentado).
         if not valid_values:
-            # País fuera de cobertura Eurostat: huérfano documentado vía ausencia
             continue
-        # Con una sola celda filtrada, la clave suele ser "0"
         value = valid_values[0]
         rows.append(
             {
@@ -305,6 +386,19 @@ TRANSFORMERS: dict[str, Transformer] = {
 }
 
 
+# CAMBIO: orquestación de la transformación con validación de clave primaria,
+# exportación directa a Parquet, particionado Hive y cálculo completo de huérfanos.
+# ANTES:
+# - Solo escribía a CSV: `df.to_csv(dest)`.
+# - No comprobaba duplicidad de claves lógicas en indicators.
+# - El reporte de huérfanos solo incluía {"iso3": orphans, "missing_in": "indicators"}.
+# AHORA:
+# 1. Comprueba duplicados en la clave primaria compuesta ['iso3', 'indicator_id', 'year', 'source_id']
+#    y lanza ValueError si hay colisiones, protegiendo la integridad del modelo.
+# 2. Elimina filas idénticas redundantes con drop_duplicates().
+# 3. Exporta tablas limpias a formato Parquet columnar (countries.parquet, languages.parquet, indicators.parquet).
+# 4. Genera dataset particionado estilo Hive para indicators en `data/clean/indicators_hive` particionado por `indicator_id`.
+# 5. Genera el informe de huérfanos `join_orphans.csv` con esquema completo (iso3, source_id, indicator_id, missing_in).
 def run_transform(cfg: Config | None = None) -> dict[str, pd.DataFrame]:
     cfg = cfg or load_config()
     ensure_dirs()
@@ -326,11 +420,12 @@ def run_transform(cfg: Config | None = None) -> dict[str, pd.DataFrame]:
     for table, parts in buckets.items():
         df = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
         before = len(df)
+        # Validación de unicidad de clave lógica en indicadores
         key = ["iso3", "indicator_id", "year", "source_id"]
         duplicate_rows = df.duplicated(key, keep=False) if set(key) <= set(df.columns) else []
         if hasattr(duplicate_rows, "any") and duplicate_rows.any():
             raise ValueError(f"Claves de indicadores duplicadas: {key}")
-        # CAMBIO: se eliminan filas idénticas al combinar las fuentes.
+        # Deduplicación exacta de filas combinadas entre fuentes
         df = df.drop_duplicates(ignore_index=True)
         if table in {"countries", "languages", "indicators"}:
             df.to_parquet(CLEAN / f"{table}.parquet", index=False)
@@ -351,13 +446,12 @@ def run_transform(cfg: Config | None = None) -> dict[str, pd.DataFrame]:
         )
         merged[table] = df
 
-    # CAMBIO: se documentan países del perfil sin indicadores asociados.
-    # Cobertura del cruce (huérfanos perfil → indicadores).
-    # join_orphans incluye iso3, source_id e indicator_id.
+    # Detección y reporte de países del catálogo que carecen de indicadores asociados (huérfanos)
     if "countries" in merged and "indicators" in merged:
         have = set(merged["indicators"]["iso3"].dropna().unique())
         profile = set(merged["countries"]["iso3"].dropna().unique())
         orphans = sorted(profile - have)
+        # Estructura normalizada del informe de huérfanos
         report = pd.DataFrame(
             {
                 "iso3": orphans,

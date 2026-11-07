@@ -29,8 +29,10 @@ def run_load(write_parquet: bool = False) -> Path:
             df.to_sql(name, conn, index=False, if_exists="replace")
             print(f"[load] {name}: {len(df)} filas → sqlite")
             if write_parquet:
-                # CAMBIO: se añade Parquet como salida para el trabajo posterior
-                # con herramientas de Big Data, manteniendo SQLite.
+                # CAMBIO: se añade Parquet como formato de salida columnar en data/serving/.
+                # ANTES: solo se cargaban los datos en la base de datos relacional SQLite (observatorio.sqlite).
+                # AHORA: opcionalmente con --parquet se exportan también en formato Parquet (.parquet),
+                # optimizado para consultas analíticas y herramientas de Big Data (Spark, DuckDB, etc.).
                 pq = SERVING / f"{name}.parquet"
                 try:
                     df.to_parquet(pq, index=False)

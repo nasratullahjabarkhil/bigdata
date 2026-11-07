@@ -41,7 +41,12 @@ def _card_markdown(iso3: str, countries: pd.DataFrame, languages: pd.DataFrame,
         or "- (sin indicadores; posible huérfano del join)"
     )
 
-    # Comparativo: mediana regional del mismo indicador y año.
+    # CAMBIO: comparativo regional basado en la mediana (en vez de la media aritmética) filtrando por el mismo año.
+    # ANTES: calculaba la media regional peer_vals sin filtrar por año, lo que mezclaba años distintos.
+    # AHORA:
+    # 1. Filtra peer_vals también por `indicators["year"] == year` para que la comparación sea temporalmente válida.
+    # 2. Usa `median()` en lugar del cálculo de media porque la mediana es más robusta frente a valores atípicos (outliers) en Big Data.
+    # 3. Comprueba `pd.isna(own_value)` para informar adecuadamente si el país no tiene dato en ese año específico.
     comparative = "_Sin indicadores para comparar._"
     if not inds.empty and "region" in countries.columns:
         ind_id = inds.iloc[0]["indicator_id"]
