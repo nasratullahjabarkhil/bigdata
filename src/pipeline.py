@@ -29,6 +29,10 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Además del SQLite, escribir Parquet en data/serving/",
     )
+    # CAMBIO: se añade el argumento CLI `--force` para permitir forzar la re-descarga
+    # de todos los archivos en data/raw/, ignorando la caché incremental del manifiesto.
+    # ANTES: solo existían --skip-extract y --parquet.
+    # AHORA: con --force el usuario puede forzar descargas completas cuando sea necesario.
     parser.add_argument(
         "--force",
         action="store_true",
@@ -37,6 +41,9 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if not args.skip_extract:
+        # CAMBIO: se propaga el flag `force` a run_extract().
+        # ANTES: siempre ejecutaba run_extract() sin opciones.
+        # AHORA: si args.force está activo, descarga incluso los archivos ya descargados con éxito.
         if args.force:
             run_extract(force=True)
         else:
