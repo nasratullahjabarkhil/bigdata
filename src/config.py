@@ -19,6 +19,11 @@ class Source:
     url_template: str | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
+    # CAMBIO: se añade el parámetro `indicator_id` para resolver plantillas de URL
+    # que parametrizan no solo el país ({iso2}, {iso3}) sino también el indicador ({indicator_id}).
+    # ANTES: resolve_url solo aceptaba iso2 e iso3 (def resolve_url(self, iso2="", iso3="")).
+    # AHORA: permite soportar fuentes como worldbank_pop que descargan múltiples indicadores
+    # usando una misma plantilla de URL (ej. .../indicator/{indicator_id}?...).
     def resolve_url(
         self, iso2: str = "", iso3: str = "", indicator_id: str = ""
     ) -> str:

@@ -18,13 +18,22 @@ import requests
 from .config import Config, FocusCountry, Source, load_config
 from .paths import MANIFEST, RAW, ensure_dirs
 
+# CAMBIO: identificador de agente de usuario personalizado y descriptivo.
+# ANTES: "UCJC-DSBD-practica1/1.2 (educational ETL framework)".
+# AHORA: identifica al equipo y proyecto en cabeceras HTTP siguiendo buenas prácticas éticas de scraping.
 USER_AGENT = "bigdata2026-equipo-nasratullah (UCJC-DSBD)"
 TIMEOUT = 60
-# CAMBIO: las peticiones masivas necesitan reintentos ante errores temporales.
+# CAMBIO: política de reintentos exponenciales con retroceso (exponential backoff).
+# ANTES: sin reintentos ni control de códigos de estado transitorios (si fallaba la red, fallaba el ETL).
+# AHORA: se reintenta hasta 4 veces ante errores 429 (rate limit) y 5xx (servidor caído temporalmente),
+# permitiendo extraer cientos de archivos de forma robusta y desatendida.
 MAX_RETRIES = 4
 RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 
+# CAMBIO: función auxiliar de saneamiento y normalización de códigos ISO (ISO-3166).
+# POR QUÉ: garantiza que valores no textuales o con espacios se limpien y cumplan la longitud esperada
+# (2 para cca2 / iso2, 3 para cca3 / iso3) antes de construir URLs o cruces relacionales.
 def _normalise_iso(value: object, length: int) -> str | None:
     if not isinstance(value, str):
         return None
@@ -32,6 +41,10 @@ def _normalise_iso(value: object, length: int) -> str | None:
     return code if len(code) == length and code.isalpha() else None
 
 
+# CAMBIO: soporte para `indicator_id` en el nombrado de ficheros raw.
+# ANTES: solo soportaba source.id e iso2 (_raw_name(source, iso2=None) -> "{id}_{iso2}.{ext}").
+# AHORA: si se especifica indicator_id, genera "{id}_{indicator_id}_{iso2}.{ext}", evitando
+# colisiones de archivos cuando una misma fuente descarga múltiples indicadores para el mismo país.
 def _raw_name(
     source: Source, iso2: str | None = None, indicator_id: str | None = None
 ) -> str:
@@ -42,8 +55,13 @@ def _raw_name(
     return f"{source.id}.{source.format}"
 
 
+# CAMBIO: cliente HTTP resiliente con reintentos y respeto de la cabecera Retry-After.
+# ANTES: requests.get() directo sin reintentos.
+# AHORA:
+# 1. Reintenta con backoff exponencial (1s, 2s, 4s, 8s, 16s).
+# 2. Respeta la cabecera 'Retry-After' enviada por servidores con limitación de tasa (rate limiting 429).
+# 3. No reintenta errores 404 porque son definitivos (el recurso no existe).
 def _request_with_retry(url: str) -> requests.Response:
-    # CAMBIO: se reintentan fallos de red, rate limiting y errores 5xx.
     for attempt in range(MAX_RETRIES + 1):
         try:
             response = requests.get(
@@ -72,14 +90,21 @@ def _request_with_retry(url: str) -> requests.Response:
     raise RuntimeError("No se pudo completar la petición")
 
 
+# CAMBIO: escritura atómica mediante archivos temporales con sufijo `.part`.
+# ANTES: dest.write_bytes(content) directamente sobre el archivo final.
+# AHORA: se escribe primero en `.part` y luego se renombra atómicamente con `replace()`.
+# POR QUÉ: evita que una caída de red o cancelación del proceso deje archivos corruptos
+# a medio escribir que luego el manifiesto o el transformer considerarían válidos.
 def _write_response(dest: Path, content: bytes) -> tuple[int, int]:
-    # CAMBIO: el archivo .part evita tratar una descarga interrumpida como válida.
     temp_dest = dest.with_suffix(dest.suffix + ".part")
     temp_dest.write_bytes(content)
     temp_dest.replace(dest)
     return 200, len(content)
 
 
+# CAMBIO: descarga con reintento y validación previa antes de escribir en disco.
+# ANTES: escribía resp.content incondicionalmente, incluso ante códigos de error HTTP 4xx o 5xx.
+# AHORA: solo escribe el archivo en disco si el código es 200 y el contenido no está vacío (> 0 bytes).
 def _download(url: str, dest: Path) -> tuple[int, int]:
     response = _request_with_retry(url)
     status = response.status_code
@@ -91,6 +116,8 @@ def _download(url: str, dest: Path) -> tuple[int, int]:
     return status, nbytes
 
 
+# CAMBIO: función auxiliar para modificar/añadir el parámetro de página en URLs con query string.
+# POR QUÉ: permite iterar limpiamente por páginas sucesivas (page=2, page=3, ...) de una API REST.
 def _page_url(url: str, page: int) -> str:
     parts = urlsplit(url)
     query = parse_qs(parts.query, keep_blank_values=True)
@@ -98,8 +125,13 @@ def _page_url(url: str, page: int) -> str:
     return urlunsplit(parts._replace(query=urlencode(query, doseq=True)))
 
 
+# CAMBIO: paginación completa para la API de World Bank.
+# ANTES: solo se descargaba la primera respuesta (a menudo incompleta si había más de 1 página).
+# AHORA:
+# 1. Lee los metadatos de paginación (total_pages = metadata['pages']).
+# 2. Si hay más páginas, realiza peticiones para cada página adicional y concatena los registros.
+# 3. Guarda el JSON consolidado final con todas las páginas combinadas.
 def _download_worldbank(url: str, dest: Path) -> tuple[int, int]:
-    # CAMBIO: World Bank puede devolver varias páginas y deben combinarse.
     first_response = _request_with_retry(url)
     status = first_response.status_code
     if status != 200 or not first_response.content:
@@ -130,6 +162,9 @@ def _download_worldbank(url: str, dest: Path) -> tuple[int, int]:
     combined = [metadata, records]
     return _write_response(dest, json.dumps(combined, ensure_ascii=False).encode("utf-8"))
 
+
+# CAMBIO: carga del estado previo del manifiesto manifest.csv para soportar descargas incrementales.
+# POR QUÉ: permite indexar los archivos por su nombre y verificar si ya fueron descargados con éxito.
 def _load_manifest() -> dict[str, dict]:
     if not MANIFEST.exists():
         return {}
@@ -143,6 +178,8 @@ def _load_manifest() -> dict[str, dict]:
         }
 
 
+# CAMBIO: guardado incremental del manifiesto tras cada archivo descargado.
+# POR QUÉ: si el proceso se detiene a mitad, no se pierde el registro de los archivos ya descargados.
 def _write_manifest(rows: dict[str, dict]) -> None:
     fieldnames = [
         "timestamp_utc",
@@ -162,8 +199,14 @@ def _write_manifest(rows: dict[str, dict]) -> None:
         writer.writeheader()
         writer.writerows(rows.values())
 
+
+# CAMBIO: extracción dinámica del universo completo de países a partir del perfil global.
+# ANTES: el universo de países estaba restringido a los 5 países iniciales del enunciado.
+# AHORA:
+# 1. Lee countries_profile.json para extraer todos los países (~250 países).
+# 2. Normaliza y valida códigos cca2 e cca3 descartando registros sin códigos válidos.
+# 3. Elimina duplicados para no realizar peticiones repetidas a los endpoints.
 def _load_all_countries() -> list[FocusCountry]:
-    # CAMBIO: se sustituye la lista fija de cinco países por el perfil global.
     profile_path = RAW / "countries_profile.json"
 
     if not profile_path.exists():
@@ -196,6 +239,19 @@ def _load_all_countries() -> list[FocusCountry]:
     return countries
 
 
+# CAMBIO: orquestación de extracción por fuente con soporte para universos de países,
+# reanudación idempotente y guardado incremental.
+# ANTES:
+# - Solo iteraba sobre los 5 países del foco inicial.
+# - No soportaba fuentes con múltiples indicator_ids.
+# - Descargaba todo de nuevo sin comprobar si ya existía en disco / manifiesto.
+# - El manifiesto se escribía al final del todo; si se interrumpía, se perdía todo el tracking.
+# AHORA:
+# 1. Obtiene la lista dinámica de indicadores de source.meta (indicator_ids o indicator_id).
+# 2. Utiliza el universo completo obtenido por _load_all_countries() si la fuente tiene url_template.
+# 3. Comprueba el manifiesto previo y el archivo local: si ya se descargó correctamente (HTTP 200 y tamaño > 0)
+#    y no se indicó force=True, se omite la descarga (idempotencia y reanudación).
+# 4. Actualiza y persiste el archivo manifest.csv de forma incremental tras procesar cada archivo.
 def extract_source(
     source: Source, cfg: Config, *, force: bool = False, run_id: str | None = None
 ) -> list[dict]:
@@ -205,7 +261,6 @@ def extract_source(
     run_id = run_id or uuid.uuid4().hex
     manifest_rows = _load_manifest()
 
-    # CAMBIO: las fuentes parametrizadas se recorren para todos los países.
     indicator_ids = (source.meta or {}).get("indicator_ids") or [
         (source.meta or {}).get("indicator_id")
     ]
@@ -231,7 +286,9 @@ def extract_source(
             dest = RAW / filename
             previous = manifest_rows.get(filename)
 
-            # CAMBIO: se reanudan las ejecuciones omitiendo descargas ya completas.
+            # CAMBIO: idempotencia y reanudación rápida.
+            # Si el fichero ya existe en disco con tamaño > 0 y el manifiesto registra un HTTP 200 anterior,
+            # no se repite la petición a la red a menos que se invoque con --force.
             if (
                 not force
                 and previous
@@ -269,7 +326,7 @@ def extract_source(
                 "note": note,
             }
 
-            # CAMBIO: se guarda el progreso después de cada archivo descargado.
+            # CAMBIO: persistencia incremental del manifiesto en cada iteración.
             manifest_rows[filename] = row
             _write_manifest(manifest_rows)
             rows.append(row)
@@ -277,13 +334,22 @@ def extract_source(
     return rows
 
 
+# CAMBIO: orden de extracción por dependencias, trazabilidad con run_id y flag --force.
+# ANTES:
+# - Iteraba las fuentes en el orden de definición sin tener en cuenta dependencias.
+# - El manifiesto no incluía run_id para distinguir ejecuciones sucesivas del pipeline.
+# AHORA:
+# 1. Separa 'countries_profile' del resto y la ejecuta primero para asegurar que
+#    countries_profile.json exista en disco antes de procesar fuentes basadas en plantilla.
+# 2. Genera un identificador único de ejecución (run_id UUID) para agrupar las descargas de cada sesión.
+# 3. Admite el parámetro `force` (expuesto vía CLI --force) para invalidar la comprobación de archivos existentes.
 def run_extract(cfg: Config | None = None, *, force: bool = False) -> Path:
     cfg = cfg or load_config()
     ensure_dirs()
     all_rows: list[dict] = []
     run_id = uuid.uuid4().hex
 
-    # CAMBIO: el perfil debe estar disponible antes de construir URLs ISO2.
+    # El perfil debe estar disponible antes de construir URLs ISO2.
     profile_sources = [
         source
         for source in cfg.sources
@@ -327,6 +393,9 @@ def run_extract(cfg: Config | None = None, *, force: bool = False) -> Path:
 
 
 if __name__ == "__main__":
+    # CAMBIO: soporte para ejecutar extract independientemente con argumentos de línea de comandos.
+    # ANTES: simplemente llamaba a run_extract().
+    # AHORA: añade argparse para poder pasar --force desde terminal (ej. python -m src.extract --force).
     import argparse
 
     parser = argparse.ArgumentParser(description="Descarga las fuentes del ETL")
