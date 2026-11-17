@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T2: reintentos con espera creciente ante 429/5xx, nunca ante 404.
 """T2 · Reintentos con espera creciente ante errores transitorios."""
 
 from __future__ import annotations

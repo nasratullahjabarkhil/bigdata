@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T2: Eurostat y OWID pasan a universo completo y serie temporal completa.
 """T2 · El resto de fuentes también pasa a universo y serie completa."""
 
 from __future__ import annotations

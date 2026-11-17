@@ -1,4 +1,5 @@
 requests>=2.31
 pandas>=2.0
 PyYAML>=6.0
+# CAMBIO (Hito 1): pyarrow permite escribir/leer Parquet (clean/ y serving/).
 pyarrow>=14.0

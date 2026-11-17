@@ -48,6 +48,9 @@ class Config:
     focus_countries: list[FocusCountry]
 
 
+# NOTA (Hito 1): sources.yaml ya no declara `focus_countries`, así que aquí se
+# devuelve una lista vacía. Se mantiene el campo por compatibilidad: las pruebas
+# offline y el código antiguo pueden seguir pasando una lista de países a mano.
 def load_config(path=SOURCES_YAML) -> Config:
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)

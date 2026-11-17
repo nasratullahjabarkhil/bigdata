@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T3: esquema común de indicadores, clave única y huérfanos por fuente.
 """T3 · Esquema común, clave única y huérfanos por fuente."""
 
 from __future__ import annotations

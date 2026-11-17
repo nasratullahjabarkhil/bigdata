@@ -1,3 +1,4 @@
+# AÑADIDO (Hito 1): conftest raíz; define --repo para poder probar otro clon del ETL.
 """Opción --repo. Tiene que vivir en la raíz: pytest la lee antes de recoger tests."""
 
 from __future__ import annotations

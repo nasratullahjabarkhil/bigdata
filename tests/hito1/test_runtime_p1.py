@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: Ejecuta de verdad config, extract, transform, load y fichas con datos falsos y sin red.
 """Ejecución real del ETL de la Práctica 1, sin red y sin tocar data/.
 
 Estas pruebas tienen que pasar sobre el código que ya entregaron los

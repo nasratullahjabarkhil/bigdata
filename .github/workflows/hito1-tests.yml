@@ -1,3 +1,5 @@
+# AÑADIDO (Hito 1): integración continua. En cada push a main y en cada Pull Request
+# GitHub Actions instala las dependencias y ejecuta `pytest -q tests/hito1`.
 name: Hito 1 — comprobaciones
 
 on:
