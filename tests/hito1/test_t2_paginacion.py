@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T2: se recorren todas las páginas que anuncia World Bank.
 """T2 · Paginación completa frente a metadatos del Banco Mundial."""
 
 from __future__ import annotations

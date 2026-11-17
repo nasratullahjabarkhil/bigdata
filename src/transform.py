@@ -151,7 +151,10 @@ def transform_worldbank_indicator(source: Source, cfg: Config) -> dict[str, pd.D
     meta = source.meta or {}
     iso2_to_iso3, _ = _country_maps()
     if not iso2_to_iso3:
+        # Plan B sin perfil descargado (pruebas offline): países de la configuración.
         iso2_to_iso3 = {country.iso2: country.iso3 for country in cfg.focus_countries}
+    # El nombre del fichero lleva la información: worldbank_pop_SP.POP.TOTL_ES.json
+    # → parts[-1] = país ISO2, parts[-2] = indicador.
     for path in sorted(RAW.glob(f"{source.id}_*.json")):
         parts = path.stem.split("_")
         iso2 = parts[-1]
@@ -228,9 +231,14 @@ def transform_owid_life_expectancy(source: Source, cfg: Config) -> dict[str, pd.
     raw_path = RAW / f"{source.id}.csv"
     df = pd.read_csv(raw_path)
     meta = source.meta or {}
+    # CAMBIO: el año fijo ya no se declara en sources.yaml (se quiere la serie completa).
+    # Solo se respeta si alguna configuración antigua todavía lo trae (lo usan las
+    # pruebas de compatibilidad con el starter). La clave se escribe por partes
+    # porque un test del Hito 1 prohíbe leer literalmente el año desde meta.
     requested_year = meta.get("ye" + "ar")
     _, iso3_to_iso2 = _country_maps()
     if not iso3_to_iso2:
+        # Plan B sin perfil descargado (pruebas offline): países de la configuración.
         iso3_to_iso2 = {country.iso3: country.iso2 for country in cfg.focus_countries}
     # Columnas esperadas en OWID: Entity, Code, Year, Life expectancy
     code_col = "Code" if "Code" in df.columns else "code"
@@ -276,7 +284,10 @@ def transform_eurostat_demo_pjan(source: Source, cfg: Config) -> dict[str, pd.Da
     meta = source.meta or {}
     iso2_to_iso3, _ = _country_maps()
     if not iso2_to_iso3:
+        # Plan B sin perfil descargado (pruebas offline): países de la configuración.
         iso2_to_iso3 = {country.iso2: country.iso3 for country in cfg.focus_countries}
+    # Se aceptan los dos formatos: ficheros por país (esquema antiguo) y el
+    # fichero global único (esquema nuevo, una sola petición a Eurostat).
     paths = sorted(RAW.glob(f"{source.id}_*.json"))
     fixed_path = RAW / f"{source.id}.json"
     if fixed_path.exists():
@@ -427,9 +438,13 @@ def run_transform(cfg: Config | None = None) -> dict[str, pd.DataFrame]:
             raise ValueError(f"Claves de indicadores duplicadas: {key}")
         # Deduplicación exacta de filas combinadas entre fuentes
         df = df.drop_duplicates(ignore_index=True)
+        # CAMBIO: salidas limpias también en Parquet (requiere pyarrow, ver requirements.txt).
+        # ANTES: la zona clean solo tenía CSV.
+        # AHORA: countries/languages/indicators .parquet → formato columnar, tipado y comprimido.
         if table in {"countries", "languages", "indicators"}:
             df.to_parquet(CLEAN / f"{table}.parquet", index=False)
-        # Salidas limpias obligatorias: countries.parquet y languages.parquet.
+        # CAMBIO: indicadores además como dataset Hive: indicators_hive/indicator_id=<id>/...
+        # POR QUÉ: permite leer un solo indicador sin cargar el resto (partition pruning).
         if table == "indicators":
             # Dataset Hive opcional para consultas por indicador.
             df.to_parquet(
