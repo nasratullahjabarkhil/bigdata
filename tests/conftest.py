@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: Fixtures comunes (repo_root, src_texts, sources_yaml...) para que todas las pruebas lean el mismo repo.
 """Fixtures compartidas: Hito 1, Hito 2 y ejecución sobre otro clon.
 
 El repo objetivo es, por este orden:

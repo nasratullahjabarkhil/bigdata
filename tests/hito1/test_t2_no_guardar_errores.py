@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T2: una respuesta distinta de HTTP 200 no se guarda en data/raw/.
 """T2 · Solo HTTP 200 se materializa en data/raw/ como dato."""
 
 from __future__ import annotations

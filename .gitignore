@@ -11,6 +11,8 @@ cards/*
 !cards/.gitkeep
 informe/*
 !informe/.gitkeep
+# CAMBIO (Hito 1): se ignoran también data/ completo y logs/ para no subir
+# descargas masivas (~250 países × varios indicadores) ni trazas locales.
 data/
 logs/
 

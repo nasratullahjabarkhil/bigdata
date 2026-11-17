@@ -1,1 +1,2 @@
+# AÑADIDO (Hito 1): dependencias solo de desarrollo; pytest ejecuta tests/hito1.
 pytest>=8.0
