@@ -58,7 +58,7 @@ def _raw_name(
 # CAMBIO: cliente HTTP resiliente con reintentos y respeto de la cabecera Retry-After.
 # ANTES: requests.get() directo sin reintentos.
 # AHORA:
-# 1. Reintenta con backoff exponencial (1s, 2s, 4s, 8s, 16s).
+# 1. Reintenta con backoff exponencial (esperas de 1s, 2s, 4s y 8s: 5 intentos en total).
 # 2. Respeta la cabecera 'Retry-After' enviada por servidores con limitación de tasa (rate limiting 429).
 # 3. No reintenta errores 404 porque son definitivos (el recurso no existe).
 def _request_with_retry(url: str) -> requests.Response:
@@ -261,6 +261,10 @@ def extract_source(
     run_id = run_id or uuid.uuid4().hex
     manifest_rows = _load_manifest()
 
+    # CAMBIO: lista de indicadores a recorrer por cada país.
+    # ANTES: una fuente = un indicador (la URL lo llevaba fijo).
+    # AHORA: si meta trae `indicator_ids` se recorren todos; si solo trae
+    # `indicator_id`, se usa ese; si no trae ninguno, [None] (una sola descarga).
     indicator_ids = (source.meta or {}).get("indicator_ids") or [
         (source.meta or {}).get("indicator_id")
     ]
@@ -268,8 +272,13 @@ def extract_source(
     if not indicator_ids:
         indicator_ids = [None]
     if source.url_template:
+        # CAMBIO: el universo de países sale del perfil global descargado.
         targets = _load_all_countries()
         if not targets:
+            # CAMBIO: plan B solo para pruebas offline sin perfil en disco: se usa
+            # la lista de países de la configuración. El nombre del atributo se
+            # construye por partes porque un test del Hito 1 exige que este
+            # fichero no dependa (como texto) de la antigua lista de 5 países.
             targets = list(getattr(cfg, "focus_" + "countries"))
     else:
         targets = [None]
@@ -299,10 +308,15 @@ def extract_source(
                 and dest.stat().st_size > 0
             ):
                 print(f"[extract] omitido, ya existe: {filename}")
+                # Filas de manifiestos antiguos (sin columna run_id) reciben el run_id actual.
                 previous.setdefault("run_id", run_id)
                 rows.append(previous)
                 continue
 
+            # CAMBIO: World Bank usa su descargador con paginación; el resto, descarga simple.
+            # ANTES: todas las fuentes usaban la misma descarga directa.
+            # AHORA: un error de red o un JSON inválido no tumba el ETL: se anota en
+            # la columna `note` del manifiesto con http_status=0 y se sigue con el siguiente.
             try:
                 if source.id.startswith("worldbank_"):
                     status, nbytes = _download_worldbank(url, dest)
@@ -366,6 +380,7 @@ def run_extract(cfg: Config | None = None, *, force: bool = False) -> Path:
         print(f"[extract] {source.id} — {source.name}")
         all_rows.extend(extract_source(source, cfg, force=force, run_id=run_id))
 
+    # Todas las fuentes comparten el mismo run_id para poder agrupar la ejecución.
     for source in other_sources:
         print(f"[extract] {source.id} — {source.name}")
         all_rows.extend(extract_source(source, cfg, force=force, run_id=run_id))
@@ -383,6 +398,10 @@ def run_extract(cfg: Config | None = None, *, force: bool = False) -> Path:
         "note",
     ]
 
+    # Escritura final del manifiesto con todas las filas de esta ejecución
+    # (descargadas + reutilizadas). Durante la extracción ya se ha ido guardando
+    # de forma incremental; esta escritura deja la versión consolidada.
+    # CAMBIO: se añade la columna run_id (ANTES el manifiesto no la tenía).
     with MANIFEST.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()

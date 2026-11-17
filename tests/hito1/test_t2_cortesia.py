@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T2: User-Agent propio del equipo y señales de limitación de ritmo.
 """T2 · Cortesía: ritmo ≤ 5 pet/s y User-Agent del equipo."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T1: el perfil no se queda en 5 países y las entidades sin ISO se registran como excluidas.
 """T1 · Universo de países (lo que el Hito 1 ya tiene que dejar escrito)."""
 
 from __future__ import annotations

@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: Ejecuta el ETL real en una carpeta temporal y sin red, para no tocar data/.
 """Importa el ``src`` del repo objetivo y lo desvía a un directorio temporal.
 
 Sirve para ejecutar el código del equipo (o del starter) sin tocar su

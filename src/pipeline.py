@@ -5,6 +5,7 @@ Uso (desde practica_01_starter/):
     python -m src.pipeline
     python -m src.pipeline --skip-extract   # reusa data/raw/
     python -m src.pipeline --parquet
+    python -m src.pipeline --force          # CAMBIO (Hito 1): repite todas las descargas
 """
 
 from __future__ import annotations

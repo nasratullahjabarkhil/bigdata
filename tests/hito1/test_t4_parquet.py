@@ -1,3 +1,5 @@
+# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
+# PARA QUÉ: T4: indicadores en Parquet particionado estilo Hive por indicator_id.
 """T4 · Parquet particionado estilo Hive por indicator_id."""
 
 from __future__ import annotations
