@@ -20,11 +20,36 @@ def _read_table(conn: sqlite3.Connection, name: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _fmt(value: float) -> str:
+    return f"{value:,.2f}"
+
+
+# CAMBIO (Hito 2): tabla de medianas por (región, indicador, fuente, año).
+# ANTES: la mediana se recalculaba dentro de cada ficha.
+# AHORA: se calcula una sola vez para todas las fichas (≈200 países × toda la serie).
+# Solo entran valores no nulos de países aceptados (countries ya no tiene agregados,
+# así que "European Union" o "World" no mueven la mediana de Europa).
+def _regional_medians(countries: pd.DataFrame, indicators: pd.DataFrame) -> pd.DataFrame:
+    if indicators.empty or "region" not in countries.columns:
+        return pd.DataFrame(columns=["region", "indicator_id", "source_id", "year", "median"])
+    with_value = indicators[indicators["value"].notna()].merge(
+        countries[["iso3", "region"]], on="iso3", how="inner"
+    )
+    return (
+        with_value.groupby(["region", "indicator_id", "source_id", "year"])["value"]
+        .median()
+        .rename("median")
+        .reset_index()
+    )
+
+
 def _card_markdown(iso3: str, countries: pd.DataFrame, languages: pd.DataFrame,
-                   indicators: pd.DataFrame) -> str:
+                   indicators: pd.DataFrame, medians: pd.DataFrame | None = None) -> str:
     c = countries[countries["iso3"] == iso3].iloc[0]
-    langs = languages[languages["iso3"] == iso3]
-    inds = indicators[indicators["iso3"] == iso3]
+    langs = languages[languages["iso3"] == iso3] if not languages.empty else languages
+    inds = indicators[indicators["iso3"] == iso3] if not indicators.empty else indicators
+    if medians is None:
+        medians = _regional_medians(countries, indicators)
 
     lang_lines = (
         "\n".join(
@@ -32,47 +57,57 @@ def _card_markdown(iso3: str, countries: pd.DataFrame, languages: pd.DataFrame,
         )
         or "- (sin idiomas en clean/)"
     )
-    ind_lines = (
-        "\n".join(
-            f"- **{r.indicator_label}** ({r.year}): {r.value} {r.unit or ''} "
-            f"_(fuente: {r.source_id})_"
-            for _, r in inds.iterrows()
-        )
-        or "- (sin indicadores; posible huérfano del join)"
-    )
 
-    # CAMBIO: comparativo regional basado en la mediana (en vez de la media aritmética) filtrando por el mismo año.
-    # ANTES: calculaba la media regional peer_vals sin filtrar por año, lo que mezclaba años distintos.
-    # AHORA:
-    # 1. Filtra peer_vals también por `indicators["year"] == year` para que la comparación sea temporalmente válida.
-    # 2. Usa `median()` en lugar del cálculo de media porque la mediana es más robusta frente a valores atípicos (outliers) en Big Data.
-    # 3. Comprueba `pd.isna(own_value)` para informar adecuadamente si el país no tiene dato en ese año específico.
-    comparative = "_Sin indicadores para comparar._"
-    if not inds.empty and "region" in countries.columns:
-        ind_id = inds.iloc[0]["indicator_id"]
-        year = inds.iloc[0]["year"]
-        region = c["region"]
-        peers = countries[countries["region"] == region]["iso3"]
-        peer_vals = indicators[
-            (indicators["iso3"].isin(peers))
-            & (indicators["indicator_id"] == ind_id)
-            & (indicators["year"] == year)
-            & indicators["value"].notna()
-        ]["value"]
-        if not peer_vals.empty:
-            median_v = peer_vals.astype(float).median()
-            own_value = inds.iloc[0]["value"]
-            if pd.isna(own_value):
-                comparative = (
-                    f"No hay dato para este país en `{ind_id}` durante `{year}`."
-                )
-            else:
-                own = float(own_value)
-                comparative = (
-                    f"Respecto a la mediana de **{region}** en `{ind_id}` "
-                    f"({median_v:,.2f}): este país está en **{own:,.2f}** "
-                    f"({'por encima' if own > median_v else 'por debajo o igual'})."
-                )
+    # CAMBIO (Hito 2): un bloque por indicador con su último año con dato.
+    # ANTES: se listaban todas las filas del país (con la serie completa eran
+    # cientos de líneas) y el comparativo usaba solo el primer indicador.
+    # AHORA, por cada (indicador, fuente):
+    # 1. Se toma el año más reciente con valor no nulo del país.
+    # 2. Se compara con la MEDIANA de su región en el mismo indicador y el mismo year.
+    #    POR QUÉ la mediana: es robusta frente a valores extremos (micro-estados,
+    #    potencias) y no mezcla años distintos.
+    # 3. Si el país solo tiene nulos, la ficha dice que no hay dato (no inventa un cero).
+    ind_lines: list[str] = []
+    comp_lines: list[str] = []
+    region = c.get("region")
+    for (ind_id, source_id), group in inds.groupby(["indicator_id", "source_id"], sort=True):
+        label = group["indicator_label"].dropna().iloc[0] if group["indicator_label"].notna().any() else ind_id
+        unit = group["unit"].dropna().iloc[0] if group["unit"].notna().any() else ""
+        with_value = group[group["value"].notna()]
+        if with_value.empty:
+            years = group["year"].dropna()
+            rango = f"{int(years.min())}–{int(years.max())}" if not years.empty else "?"
+            ind_lines.append(
+                f"- **{label}**: sin dato (todas las filas {rango} son nulas) _(fuente: {source_id})_"
+            )
+            comp_lines.append(f"- `{ind_id}`: no hay dato para este país en ningún año.")
+            continue
+        last = with_value.sort_values("year").iloc[-1]
+        year = int(last["year"])
+        own = float(last["value"])
+        n_years = with_value["year"].nunique()
+        ind_lines.append(
+            f"- **{label}** ({year}): {_fmt(own)} {unit} "
+            f"_(fuente: {source_id}; {n_years} años con dato)_"
+        )
+        peer = medians[
+            (medians["region"] == region)
+            & (medians["indicator_id"] == ind_id)
+            & (medians["source_id"] == source_id)
+            & (medians["year"] == year)
+        ]
+        if peer.empty:
+            comp_lines.append(f"- `{ind_id}` ({year}): sin dato regional ese año.")
+            continue
+        median_v = float(peer.iloc[0]["median"])
+        posicion = "por encima" if own > median_v else ("igual" if own == median_v else "por debajo")
+        comp_lines.append(
+            f"- `{ind_id}` ({year}): {_fmt(own)} frente a la mediana de **{region}** "
+            f"({_fmt(median_v)}) → **{posicion}**."
+        )
+
+    ind_text = "\n".join(ind_lines) or "- (sin indicadores; posible huérfano del join)"
+    comparative = "\n".join(comp_lines) or "_Sin indicadores para comparar._"
 
     return f"""# Ficha país — {c['name_common']} ({iso3})
 
@@ -84,11 +119,11 @@ def _card_markdown(iso3: str, countries: pd.DataFrame, languages: pd.DataFrame,
 
 {lang_lines}
 
-## Indicadores
+## Indicadores (último año con dato)
 
-{ind_lines}
+{ind_text}
 
-## Comparativo
+## Comparativo (mediana de la región, mismo indicador y mismo año)
 
 {comparative}
 
@@ -115,13 +150,23 @@ def run_build_cards() -> list[Path]:
     if countries.empty:
         raise RuntimeError("Tabla countries vacía: revisad transform.")
 
+    medians = _regional_medians(countries, indicators)
+    accepted = countries["iso3"].tolist()
+
+    # CAMBIO (Hito 2): una ficha por país aceptado y ninguna más.
+    # Se borran fichas viejas de entidades que el criterio de país ya no acepta
+    # (p. ej. territorios que se aceptaban en el Hito 1).
+    for old in CARDS.glob("*.md"):
+        if old.stem not in accepted:
+            old.unlink()
+
     written: list[Path] = []
-    for iso3 in countries["iso3"].tolist():
-        md = _card_markdown(iso3, countries, languages, indicators)
+    for iso3 in accepted:
+        md = _card_markdown(iso3, countries, languages, indicators, medians)
         path = CARDS / f"{iso3}.md"
         path.write_text(md, encoding="utf-8")
         written.append(path)
-        print(f"[cards] {path}")
+    print(f"[cards] {len(written)} fichas → {CARDS}")
     return written
 
 

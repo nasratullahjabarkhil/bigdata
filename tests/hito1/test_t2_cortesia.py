@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T2: User-Agent propio del equipo y señales de limitación de ritmo.
-"""T2 · Cortesía: ritmo ≤ 5 pet/s y User-Agent del equipo."""
+"""T2: Cortesía: ritmo ≤ 5 pet/s y User-Agent del equipo."""
 
 from __future__ import annotations
 
@@ -11,20 +9,34 @@ import pytest
 pytestmark = pytest.mark.hito1
 
 
-def test_user_agent_identifica_al_equipo(extract_source: str):
-    """El User-Agent debe identificar al equipo, no solo al starter genérico."""
+def _user_agent(extract_source: str, sources_yaml: dict) -> str:
+    """Constante del extract o bloque http.user_agent de sources.yaml."""
+    http = sources_yaml.get("http") or {}
+    if isinstance(http, dict) and http.get("user_agent"):
+        return str(http["user_agent"])
     m = re.search(r'USER_AGENT\s*=\s*["\']([^"\']+)["\']', extract_source)
-    assert m, (
-        "No se encuentra una constante USER_AGENT en src/extract.py. "
-        "Es obligatoria para identificarse ante las APIs."
+    if m:
+        return m.group(1)
+    m = re.search(r'user_agent\s*[:=]\s*["\']([^"\']+)["\']', extract_source)
+    if m:
+        return m.group(1)
+    return ""
+
+
+def test_user_agent_identifica_al_equipo(extract_source: str, sources_yaml: dict):
+    """El User-Agent debe identificar al equipo, no al starter ni a un marcador."""
+    ua = _user_agent(extract_source, sources_yaml)
+    assert ua, (
+        "No hay User-Agent: ni constante USER_AGENT en src/extract.py "
+        "ni http.user_agent en sources.yaml."
     )
-    ua = m.group(1)
     generico = "UCJC-DSBD-practica1" in ua and "educational ETL framework" in ua
-    assert not generico, (
+    marcador = "CAMBIAD_ESTO" in ua or "cambia" in ua.lower() and "esto" in ua.lower()
+    assert not generico and not marcador, (
         f"User-Agent actual: {ua!r}. "
-        "Seguís con el identificador genérico del starter. "
-        "Sustituidlo por uno que identifique a vuestro equipo "
-        "(asignatura + nombre del equipo o repo)."
+        "Tiene que identificar a vuestro equipo "
+        "(asignatura + nombre del equipo o repo), no el texto del starter "
+        "ni un marcador del tipo CAMBIAD_ESTO."
     )
 
 

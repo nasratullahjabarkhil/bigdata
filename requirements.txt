@@ -1,5 +1,8 @@
 requests>=2.31
-pandas>=2.0
+# CAMBIO (Hito 2): pandas por debajo de 3, porque PySpark 4.2 aún no soporta del todo pandas 3 (enunciado).
+pandas>=2.0,<3
 PyYAML>=6.0
 # CAMBIO (Hito 1): pyarrow permite escribir/leer Parquet (clean/ y serving/).
 pyarrow>=14.0
+# CAMBIO (Hito 2): Spark 4.2 para spark/job_01.py (necesita Java 17, 21 o 25).
+pyspark>=4.2,<4.3

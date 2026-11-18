@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: Comprueba que existe --force (única forma de repetir una descarga buena).
-"""Hito 1 · La segunda ejecución del pipeline no vuelve a descargar."""
+"""Hito 1: La segunda ejecución del pipeline no vuelve a descargar."""
 
 from __future__ import annotations
 

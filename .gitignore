@@ -19,3 +19,9 @@ logs/
 # Documentación de trabajo local
 info.md
 ampliacion_todos_los_paises.md
+
+# CAMBIO (Hito 2): restos locales de Spark. El event log completo vive en logs/
+# (ignorado); solo el subdirectorio citado se copia a evidencias/.
+spark-warehouse/
+metastore_db/
+derby.log
