@@ -1,5 +1,7 @@
 # AÑADIDO (Hito 2): workflow del profesor; ejecuta `pytest -q tests/hito2` en cada push y PR.
-name: Hito 2: comprobaciones
+# Entre comillas: sin ellas, "Hito 2: comprobaciones" no es YAML válido
+# (los segundos dos puntos) y GitHub rechaza el workflow sin ejecutarlo.
+name: "Hito 2: comprobaciones"
 
 on:
   push:
