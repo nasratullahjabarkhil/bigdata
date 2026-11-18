@@ -1,0 +1,86 @@
+<scratchpad>/medir.py:25: FutureWarning: The default of observed=False is deprecated and will be changed to True in a future version of pandas. Pass observed=False to retain current behavior or observed=True to adopt the future default and silence this warning.
+  g = ind.groupby(["source_id", "indicator_id"]).agg(filas=("value", "size"), con_dato=("value", "count"), paises=("iso3", "nunique"), y0=("year", "min"), y1=("year", "max"))
+== A. bruto World Bank
+worldbank_NY.GDP.MKTP.CD.json: total=17556 guardados=17556 pages=4 per_page=5000
+worldbank_NY.GDP.PCAP.CD.json: total=17556 guardados=17556 pages=4 per_page=5000
+worldbank_SP.DYN.LE00.IN.json: total=17556 guardados=17556 pages=4 per_page=5000
+worldbank_SP.POP.TOTL.FE.IN.json: total=17556 guardados=17556 pages=4 per_page=5000
+worldbank_SP.POP.TOTL.json: total=17556 guardados=17556 pages=4 per_page=5000
+worldbank_SP.URB.TOTL.IN.ZS.json: total=17556 guardados=17556 pages=4 per_page=5000
+manifest filas 18 run_ids Counter({'cbef7f5778f446279f1b16b3c392f35d': 9, 'f488e4f9b87f42be9c30485ca8f92efd': 9})
+manifest status Counter({'200': 18})
+== B. clean
+count_rows 96289
+iso3: string
+iso2: string
+indicator_label: string
+year: int64
+value: double
+unit: string
+source_id: string
+indicator_id: string
+-- schema metadata --
+pandas: '{"index_columns": [], "column_indexes": [], "columns": [{"name":' + 1005
+                                        filas  con_dato  paises    y0    y1
+source_id            indicator_id                                          
+eurostat_pop         NY.GDP.MKTP.CD         0         0       0  <NA>  <NA>
+                     NY.GDP.PCAP.CD         0         0       0  <NA>  <NA>
+                     SP.DYN.LE00.IN         0         0       0  <NA>  <NA>
+                     SP.POP.TOTL.FE.IN      0         0       0  <NA>  <NA>
+                     SP.POP.TOTL            0         0       0  <NA>  <NA>
+                     SP.URB.TOTL.IN.ZS      0         0       0  <NA>  <NA>
+                     demo_pjan           2577      2577      49  1960  2025
+                     life_expectancy        0         0       0  <NA>  <NA>
+owid_life_expectancy NY.GDP.MKTP.CD         0         0       0  <NA>  <NA>
+                     NY.GDP.PCAP.CD         0         0       0  <NA>  <NA>
+                     SP.DYN.LE00.IN         0         0       0  <NA>  <NA>
+                     SP.POP.TOTL.FE.IN      0         0       0  <NA>  <NA>
+                     SP.POP.TOTL            0         0       0  <NA>  <NA>
+                     SP.URB.TOTL.IN.ZS      0         0       0  <NA>  <NA>
+                     demo_pjan              0         0       0  <NA>  <NA>
+                     life_expectancy    16492     16492     196  1543  2023
+worldbank            NY.GDP.MKTP.CD     12870     11012     195  1960  2025
+                     NY.GDP.PCAP.CD     12870     11012     195  1960  2025
+                     SP.DYN.LE00.IN     12870     12641     195  1960  2025
+                     SP.POP.TOTL.FE.IN  12870     12840     195  1960  2025
+                     SP.POP.TOTL        12870     12840     195  1960  2025
+                     SP.URB.TOTL.IN.ZS  12870     12870     195  1960  2025
+                     demo_pjan              0         0       0  <NA>  <NA>
+                     life_expectancy        0         0       0  <NA>  <NA>
+total filas 96289 con dato 92284
+dtypes {'iso3': dtype('O'), 'iso2': dtype('O'), 'indicator_label': dtype('O'), 'year': Int64Dtype(), 'value': dtype('float64'), 'unit': dtype('O'), 'source_id': dtype('O'), 'indicator_id': CategoricalDtype(categories=['NY.GDP.MKTP.CD', 'NY.GDP.PCAP.CD', 'SP.DYN.LE00.IN',
+                  'SP.POP.TOTL.FE.IN', 'SP.POP.TOTL', 'SP.URB.TOTL.IN.ZS',
+                  'demo_pjan', 'life_expectancy'],
+, ordered=False, categories_dtype=object)}
+countries 196
+excluded 204
+source_id             reason                     
+countries_profile     not_independent                54
+eurostat_pop          aggregate_or_not_in_profile    10
+owid_life_expectancy  aggregate_or_not_in_profile    28
+                      not_accepted_country           41
+worldbank             aggregate_or_not_in_profile    50
+                      not_accepted_country           21
+orphans 155
+source_id     indicator_id     
+eurostat_pop  demo_pjan            147
+worldbank     NY.GDP.MKTP.CD         2
+              NY.GDP.PCAP.CD         2
+              SP.DYN.LE00.IN         1
+              SP.POP.TOTL            1
+              SP.POP.TOTL.FE.IN      1
+              SP.URB.TOTL.IN.ZS      1
+ejemplo huérfanos WB: {'VAT': 6, 'PRK': 2}
+== Tamaños CSV vs Parquet
+indicators.csv 7964602 indicators/ (hive) 831856
+   indicator_id=NY.GDP.MKTP.CD 1 ficheros 116437 bytes
+   indicator_id=NY.GDP.PCAP.CD 1 ficheros 116508 bytes
+   indicator_id=SP.DYN.LE00.IN 1 ficheros 98220 bytes
+   indicator_id=SP.POP.TOTL 1 ficheros 105100 bytes
+   indicator_id=SP.POP.TOTL.FE.IN 1 ficheros 104863 bytes
+   indicator_id=SP.URB.TOTL.IN.ZS 1 ficheros 131731 bytes
+   indicator_id=demo_pjan 1 ficheros 24995 bytes
+   indicator_id=life_expectancy 1 ficheros 134002 bytes
+si se particionara por iso3: 196 ficheros, media 13458 bytes/fichero, total 2637812
+countries.csv 12764 countries.parquet 11950
+cards 196

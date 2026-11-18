@@ -24,6 +24,7 @@ Solo cuentan filas con valor no nulo: un nulo no es una observación.
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -43,6 +44,11 @@ COLUMNS = ["indicator_id", "decade", "n_rows", "n_countries", "first_year", "las
 
 def build_session(master: str) -> SparkSession:
     """Arranque del enunciado: master local y event log en logs/spark-events/."""
+    # Los workers de Python usan el mismo intérprete que el driver (el del .venv).
+    # Sin esto, Spark lanza los workers con el `python3` del PATH y, si su versión
+    # menor es distinta, aborta con PYTHON_VERSION_MISMATCH (ver BUGS.md, defecto 8).
+    os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+    os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
     EVENT_LOG.mkdir(parents=True, exist_ok=True)
     return (
         SparkSession.builder
