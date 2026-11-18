@@ -1,13 +1,6 @@
-# AÑADIDO (Hito 1): conftest raíz; define --repo para poder probar otro clon del ETL.
-"""Opción --repo. Tiene que vivir en la raíz: pytest la lee antes de recoger tests."""
+"""El alta de --repo vive en tests/conftest.py.
 
-from __future__ import annotations
-
-
-def pytest_addoption(parser):
-    parser.addoption(
-        "--repo",
-        action="store",
-        default=None,
-        help="Raíz del ETL a comprobar (sources.yaml + src/).",
-    )
+Así funciona aunque se copie solo tests/ (sin este fichero) a otro
+repositorio. Si este conftest de la raíz también la registrara, pytest
+fallaría con «option names already added» cuando carga los dos.
+"""

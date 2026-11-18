@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T2: al menos seis indicadores del Banco Mundial, con los dos obligatorios.
-"""T2 · Al menos seis indicadores del Banco Mundial (dos fijos)."""
+"""T2: Al menos seis indicadores del Banco Mundial (dos fijos)."""
 
 from __future__ import annotations
 

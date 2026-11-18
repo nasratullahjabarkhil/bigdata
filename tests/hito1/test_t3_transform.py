@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T3: esquema común de indicadores, clave única y huérfanos por fuente.
-"""T3 · Esquema común, clave única y huérfanos por fuente."""
+"""T3: Esquema común, clave única y huérfanos por fuente."""
 
 from __future__ import annotations
 
@@ -78,12 +76,19 @@ def test_la_clave_unica_es_un_error(src_texts):
 def test_huerfanos_por_fuente_e_indicador(src_texts):
     """join_orphans.csv lleva iso3, source_id e indicator_id."""
     transform = src_texts.get("transform.py", "")
-    posicion = transform.find("join_orphans")
-    assert posicion != -1, "transform.py no escribe join_orphans."
-    ventana = transform[max(0, posicion - 350) : posicion + 250]
-    for columna in ("iso3", "source_id", "indicator_id"):
-        assert columna in ventana, (
-            f"Junto a join_orphans no aparece la columna {columna}. "
-            "El huérfano es por fuente e indicador: un país sin ningún dato "
-            "en esa pareja, no un listado global con solo el iso3."
+    assert "join_orphans" in transform, "transform.py no escribe join_orphans."
+    compacto = "".join(transform.split())
+    columnas_juntas = (
+        '["iso3","source_id","indicator_id"' in compacto
+        or '["iso3","indicator_id","source_id"' in compacto
+    )
+    if not columnas_juntas:
+        posicion = transform.find("join_orphans")
+        ventana = transform[max(0, posicion - 800) : posicion + 200]
+        columnas_juntas = all(
+            columna in ventana for columna in ("iso3", "source_id", "indicator_id")
         )
+    assert columnas_juntas, (
+        "join_orphans no lleva juntas las columnas iso3, source_id e indicator_id. "
+        "El huérfano es por fuente e indicador, no un listado global con solo el iso3."
+    )

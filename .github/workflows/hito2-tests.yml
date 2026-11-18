@@ -1,0 +1,33 @@
+# AÑADIDO (Hito 2): workflow del profesor; ejecuta `pytest -q tests/hito2` en cada push y PR.
+name: Hito 2: comprobaciones
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  pytest:
+    name: pytest (Hito 2)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        # AÑADIDO: el test de cierre busca la etiqueta entrega-02 en el clon.
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Hito 2
+        run: pytest -q tests/hito2
