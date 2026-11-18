@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: Comprueba que CONTRIBUTORS.md existe y usa correo institucional.
-"""Hito 1 · CONTRIBUTORS.md con identidad institucional."""
+"""Hito 1: CONTRIBUTORS.md con identidad institucional."""
 
 from __future__ import annotations
 

@@ -1,5 +1,3 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: Fixtures comunes (repo_root, src_texts, sources_yaml...) para que todas las pruebas lean el mismo repo.
 """Fixtures compartidas: Hito 1, Hito 2 y ejecución sobre otro clon.
 
 El repo objetivo es, por este orden:
@@ -24,6 +22,17 @@ import pytest
 import yaml
 
 
+def pytest_addoption(parser):
+    # También aquí: si el clon copia tests/ y no el conftest.py de la raíz,
+    # pytest tiene que conocer --repo antes de recoger los tests.
+    parser.addoption(
+        "--repo",
+        action="store",
+        default=None,
+        help="Raíz del ETL a comprobar (sources.yaml + src/).",
+    )
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
@@ -32,6 +41,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "hito2: comprobaciones del Hito 2 (11/11) de la Entrega 2",
+    )
+    config.addinivalue_line(
+        "markers",
+        "s19: sesión 19 (18/11): query temp-stream y ACTA_S19.md",
     )
     config.addinivalue_line(
         "markers",
@@ -73,7 +86,12 @@ def _raiz_por_defecto() -> Path:
 @pytest.fixture(scope="session")
 def repo_root(request) -> Path:
     """Raíz del proyecto ETL que se está comprobando."""
-    explicito = request.config.getoption("--repo") or os.environ.get("DSBD_REPO")
+    try:
+        explicito = request.config.getoption("--repo")
+    except ValueError:
+        # tests/ copiado sin el conftest.py de la raíz: la opción no existe.
+        explicito = None
+    explicito = explicito or os.environ.get("DSBD_REPO")
     if explicito:
         return _resolver_raiz(Path(explicito))
     return _raiz_por_defecto()
@@ -121,6 +139,9 @@ def src_texts(repo_root: Path) -> dict[str, str]:
     src = repo_root / "src"
     if not src.is_dir():
         pytest.fail("Falta el paquete src/.")
-    for path in sorted(src.glob("*.py")):
-        textos[path.name] = path.read_text(encoding="utf-8")
+    for path in sorted(src.rglob("*.py")):
+        textos[path.relative_to(src).as_posix()] = path.read_text(encoding="utf-8")
+    for nombre in ("config.py", "paths.py"):
+        if nombre not in textos and f"core/{nombre}" in textos:
+            textos[nombre] = textos[f"core/{nombre}"]
     return textos

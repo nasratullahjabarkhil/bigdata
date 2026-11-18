@@ -1,5 +1,3 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: Funciones auxiliares para leer los indicadores World Bank declarados en sources.yaml.
 """Helpers compartidos por las comprobaciones del Hito 1."""
 
 from __future__ import annotations

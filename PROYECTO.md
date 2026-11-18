@@ -1,138 +1,77 @@
-# Observatorio de países — Hito 1
+# Observatorio de países — Hito 1 y Hito 2
 
-Proyecto ETL para recopilar, transformar y servir información de países
-usando cinco fuentes de datos.
+Proyecto ETL (`raw → clean → serving`) que recoge, limpia y sirve información
+de todos los países, más un job de Spark que mide la cobertura de los datos.
 
 ## Objetivo
 
-El proyecto amplía el starter inicial, que trabajaba con cinco países, para
-procesar todos los países válidos del perfil global `countries_profile.json`.
-La clave común del modelo es `iso3`; también se mantiene el mapeo entre ISO2 e
-ISO3 para conectar las distintas APIs.
+El starter trabajaba con cinco países y un año. El proyecto lo amplía al
+**universo**: 196 países aceptados (criterio en `sources.yaml`), toda la serie
+histórica, Parquet tipado y particionado, y `spark/job_01.py`. La clave común es
+`iso3`. Las equivalencias de código entre fuentes (Kosovo `XKX`/`UNK`/`OWID_KOS`,
+Grecia `EL`…) están en configuración.
 
-## Fuentes utilizadas
+## Fuentes
 
-1. Perfil de países e idiomas: `mledoze/countries`.
-2. PIB per cápita: World Bank, `NY.GDP.PCAP.CD`.
-3. Población de Eurostat: `demo_pjan`.
-4. Esperanza de vida: Our World in Data.
-5. Indicadores adicionales del World Bank:
-   - `SP.POP.TOTL`
-   - `SP.DYN.LE00.IN`
-   - `SP.URB.TOTL.IN.ZS`
-   - `NY.GDP.MKTP.CD`
-   - `SP.POP.TOTL.FE.IN`
+1. Perfil de países e idiomas: `mledoze/countries` (catálogo y criterio de país).
+2. Banco Mundial, una petición paginada `country/all` por indicador:
+   `NY.GDP.PCAP.CD`, `SP.POP.TOTL` (fijos), `SP.DYN.LE00.IN`,
+   `SP.URB.TOTL.IN.ZS`, `NY.GDP.MKTP.CD` y `SP.POP.TOTL.FE.IN`.
+3. Eurostat `demo_pjan` (población a 1 de enero, dataset completo).
+4. Our World in Data: esperanza de vida (CSV completo).
 
-La configuración completa se encuentra en [sources.yaml](./sources.yaml).
+Configuración: [sources.yaml](./sources.yaml).
 
 ## Estructura
 
 ```text
-data/raw/       Respuestas originales y manifest.csv
-data/clean/     CSV y Parquet normalizados
-data/serving/   SQLite y Parquet de consulta
-cards/          Una ficha Markdown por país
-src/             Código Extract, Transform, Load y Cards
-tests/hito1/    Pruebas automatizadas del Hito 1
-.github/        Workflow de GitHub Actions
+data/raw/                 Respuestas originales + manifest.csv (acumulativo, run_id)
+data/clean/               countries.parquet, languages.parquet,
+                          indicators/indicator_id=<id>/*.parquet (Hive),
+                          excluded_entities.csv, join_orphans.csv
+data/serving/             observatorio.sqlite, spark/cobertura_decada/
+cards/                    Una ficha Markdown por país aceptado
+src/                      Extract, Transform, Load y Cards
+spark/job_01.py           Cobertura por indicador y década (RDD, DataFrame, SQL)
+evidencias/               Event log del job y salidas de terminal
+tests/hito1, tests/hito2  Batería del profesor
+ENTREGA_02.md, BUGS.md    Documentación de la Entrega 2
 ```
 
-Los datos generados, la caché y el entorno virtual están excluidos mediante
-[.gitignore](./.gitignore).
+`data/`, `logs/` y `.venv/` se regeneran y están en [.gitignore](./.gitignore).
 
 ## Instalación
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt
 ```
 
-`pyarrow` permite escribir y leer los resultados Parquet.
+Spark 4.2 necesita Java 17, 21 o 25 (por ejemplo `brew install openjdk@21` y
+`export JAVA_HOME=/opt/homebrew/opt/openjdk@21`).
 
 ## Ejecución
 
-### Pipeline completo
-
 ```bash
-python -m src.pipeline --parquet
+python -m src.pipeline            # 1.ª vez: descarga (~3,5 min)
+python -m src.pipeline            # 2.ª vez: no re-descarga nada (~13 s)
+python -m src.pipeline --force    # repetir descargas a propósito
+python spark/job_01.py            # exit=0 si RDD == DataFrame == SQL == SQLite
+python spark/job_01.py --master "local[1]"
 ```
 
-El pipeline ejecuta:
-
-```text
-Extract → Transform → Load → Cards
-```
-
-### Reutilizar descargas
-
-```bash
-python -m src.pipeline --skip-extract --parquet
-```
-
-Las descargas válidas se reutilizan automáticamente mediante
-`data/raw/manifest.csv`.
-
-### Forzar nuevas descargas
-
-```bash
-python -m src.pipeline --force --parquet
-```
-
-También se puede ejecutar solo la extracción:
-
-```bash
-python -m src.extract
-python -m src.extract --force
-```
-
-World Bank utiliza paginación y reintentos para errores de red, HTTP 429 y
-errores 5xx. Las descargas se escriben primero como `.part` y el manifiesto
-registra el `run_id` de cada ejecución.
-
-## Resultados
-
-El proceso genera:
-
-- `countries.csv` y `countries.parquet`.
-- `languages.csv` y `languages.parquet`.
-- `indicators.csv` y `indicators.parquet`.
-- `indicators_hive/indicator_id=*/`.
-- `join_orphans.csv`.
-- `observatorio.sqlite`.
-- Una ficha Markdown por país en `cards/`.
-
-Los valores ausentes se conservan como nulos. No se convierten en ceros. Los
-duplicados de la clave de indicadores se detectan antes de guardar las tablas.
+El extract respeta como máximo 5 peticiones/s, reintenta 429/5xx/timeouts con
+espera creciente (no reintenta 404), solo guarda HTTP 200 y falla si lo
+descargado del Banco Mundial no suma el `total` de la API.
 
 ## Validación
 
-Ejecutar las pruebas del Hito 1:
-
 ```bash
 python -m pytest -q tests/hito1
+python -m pytest -q tests/hito2
 ```
 
-Resultado validado:
-
-```text
-65 passed
-```
-
-El workflow [hito1-tests.yml](./.github/workflows/hito1-tests.yml) ejecuta
-estas comprobaciones automáticamente en GitHub Actions.
-
-## Commits locales preparados
-
-El trabajo del Hito 1 está dividido en:
-
-```text
-a64dd5c Configura fuentes y dependencias del Hito 1
-4f6c883 Amplía el ETL y valida sus salidas
-4b9bb58 Añade pruebas y workflow del Hito 1
-```
-
-Este documento se añade como documentación pública del proyecto. Los archivos
-`info.md` y `ampliacion_todos_los_paises.md` son documentación local y
-continúan excluidos por `.gitignore`.
+Los workflows `hito1-tests.yml` y `hito2-tests.yml` las ejecutan en GitHub
+Actions en cada push y Pull Request. Resultados, decisiones y respuestas de
+teoría: [ENTREGA_02.md](./ENTREGA_02.md). Defectos encontrados: [BUGS.md](./BUGS.md).

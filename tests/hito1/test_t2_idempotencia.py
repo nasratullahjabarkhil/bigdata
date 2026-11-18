@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T2: sin --force no se vuelve a descargar lo que ya está bien descargado.
-"""T2 · Idempotencia del extract (sin --force no se re-descarga)."""
+"""T2: Idempotencia del extract (sin --force no se re-descarga)."""
 
 from __future__ import annotations
 
