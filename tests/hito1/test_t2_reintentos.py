@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T2: reintentos con espera creciente ante 429/5xx, nunca ante 404.
-"""T2 · Reintentos con espera creciente ante errores transitorios."""
+"""T2: Reintentos con espera creciente ante errores transitorios."""
 
 from __future__ import annotations
 
@@ -25,11 +23,12 @@ def test_hay_politica_de_reintentos(extract_source: str):
 
 def test_404_no_se_reintenta_de_forma_explicita(extract_source: str):
     """El enunciado distingue 404 (definitivo) de errores transitorios."""
-    lower = extract_source.lower()
-    menciona_404 = "404" in lower
-    # Señal mínima: el código contempla 404 como caso aparte.
-    assert menciona_404, (
-        "No aparece el caso HTTP 404 en el extract. "
-        "Conviene tratarlo como error definitivo (sin reintento), "
-        "distinto de 429/5xx."
+    if "404" in extract_source:
+        return
+    conjunto = re.search(r"RETRY_STATUS\s*=\s*\{([^}]+)\}", extract_source)
+    transitorios = conjunto.group(1) if conjunto else ""
+    reconoce_transitorios = any(codigo in transitorios for codigo in ("429", "500", "502", "503"))
+    assert conjunto and reconoce_transitorios and "404" not in transitorios, (
+        "No aparece el caso HTTP 404 en el extract, ni un conjunto de reintento "
+        "(429/5xx) que lo deje fuera. Un 404 es definitivo: no se reintenta."
     )

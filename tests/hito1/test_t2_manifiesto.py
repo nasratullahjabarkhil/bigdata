@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T2: el manifiesto es acumulativo y lleva run_id.
-"""T2 · Manifiesto acumulativo con run_id."""
+"""T2: Manifiesto acumulativo con run_id."""
 
 from __future__ import annotations
 

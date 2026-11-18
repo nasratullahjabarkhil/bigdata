@@ -1,0 +1,33 @@
+[extract] run_id=f488e4f9b87f42be9c30485ca8f92efd
+[extract] countries_profile — mledoze/countries (perfil e idiomas)
+[extract] omitido, ya existe: countries_profile.json
+[extract] worldbank — World Bank — World Development Indicators (universo, serie completa)
+[extract] omitido, ya existe: worldbank_NY.GDP.PCAP.CD.json
+[extract] omitido, ya existe: worldbank_SP.POP.TOTL.json
+[extract] omitido, ya existe: worldbank_SP.DYN.LE00.IN.json
+[extract] omitido, ya existe: worldbank_SP.URB.TOTL.IN.ZS.json
+[extract] omitido, ya existe: worldbank_NY.GDP.MKTP.CD.json
+[extract] omitido, ya existe: worldbank_SP.POP.TOTL.FE.IN.json
+[extract] eurostat_pop — Eurostat — población (demo_pjan)
+[extract] omitido, ya existe: eurostat_pop.json
+[extract] owid_life_expectancy — Our World in Data — life expectancy (CSV)
+[extract] omitido, ya existe: owid_life_expectancy.csv
+[extract] 9 filas añadidas al manifiesto acumulativo → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/raw/manifest.csv
+[transform] countries_profile → countries_profile
+[transform] worldbank → worldbank_indicator
+[transform] eurostat_pop → eurostat_demo_pjan
+[transform] owid_life_expectancy → owid_life_expectancy
+[transform] countries: 196 filas → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/clean/countries.parquet
+[transform] languages: 331 filas → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/clean/languages.parquet
+[transform] indicators: 96289 filas → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/clean/indicators/indicator_id=*/
+[transform] excluded_entities: 204 → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/clean/excluded_entities.csv
+[transform] huérfanos del join: 155 → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/clean/join_orphans.csv
+[load] countries: 196 filas → sqlite
+[load] languages: 331 filas → sqlite
+[load] indicators: 96289 filas → sqlite
+[load] excluded_entities: 204 filas → sqlite
+[load] join_orphans: 155 filas → sqlite
+[load] base → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/data/serving/observatorio.sqlite
+[cards] 196 fichas → /Users/nash/Library/CloudStorage/OneDrive-InstituciónEducativaSEK/INFORMATICA/4 Curso/1 Cuatrimestre/Desarrollo de Servidor y Big Data/Big Data/P1/practica_01_BigData_starter/cards
+[pipeline] listo.
+$S/venv/bin/python -m src.pipeline  10.85s user 0.88s system 89% cpu 13.163 total

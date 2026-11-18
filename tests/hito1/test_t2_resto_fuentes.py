@@ -1,6 +1,4 @@
-# AÑADIDO (commit 4b9bb58, Hito 1): batería de pruebas automáticas.
-# PARA QUÉ: T2: Eurostat y OWID pasan a universo completo y serie temporal completa.
-"""T2 · El resto de fuentes también pasa a universo y serie completa."""
+"""T2: El resto de fuentes también pasa a universo y serie completa."""
 
 from __future__ import annotations
 
@@ -58,12 +56,25 @@ def test_owid_no_esta_recortado_a_un_anio_de_meta(sources_yaml, src_texts):
     )
 
 
-def test_el_extract_no_itera_solo_focus_countries(extract_source: str):
-    """A escala, el bucle del extract no puede ser «un GET por país del foco»."""
+def test_el_extract_no_itera_solo_focus_countries(extract_source: str, sources_yaml: dict):
+    """A escala, el Banco Mundial no puede ser un GET por país del foco."""
+    fuentes = [s for s in (sources_yaml.get("sources") or []) if isinstance(s, dict)]
+    banco = []
+    for fuente in fuentes:
+        url = str(fuente.get("url") or fuente.get("url_template") or "")
+        sid = str(fuente.get("id") or "")
+        if "worldbank" in sid.lower() or "api.worldbank.org" in url or fuente.get("paginate") == "worldbank":
+            banco.append((fuente, url))
+    for fuente, url in banco:
+        assert "{iso2}" not in url and "{iso3}" not in url, (
+            f"La fuente {fuente.get('id')} sigue pidiendo el Banco Mundial por país ({url}). "
+            "El universo es una petición paginada (country/all), no cinco URL con {{iso2}}."
+        )
+    if any(fuente.get("paginate") == "worldbank" or "country/all" in url for fuente, url in banco):
+        return
     assert "focus_countries" not in extract_source, (
-        "src/extract.py sigue bajando una petición por cada focus_country. "
-        "El Banco Mundial (y el resto de fuentes de indicador) se piden en "
-        "universo: paginación de la API, no cinco URL con {iso2}."
+        "src/extract.py sigue bajando una petición por cada focus_country "
+        "y sources.yaml no declara paginación de universo para el Banco Mundial."
     )
 
 
